@@ -1,0 +1,61 @@
+name: Build TWRP Image
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Set up JDK
+        uses: actions/setup-java@v1
+        with:
+          java-version: '11'
+          distribution: 'adopt'
+
+      - name: Install Dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev python3 curl git ccache lzop bison gperf
+
+      - name: Init Repo
+        run: |
+          curl https://storage.googleapis.com/git-repo-downloads/repo > repo
+          chmod a+x repo
+          sudo mv repo /usr/local/bin/repo
+          repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+
+      - name: Sync Repo
+        run: repo sync --no-repo-verify -c --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune -j$(nproc)
+
+      - name: Clone common tree repo
+        run: git clone https://github.com/Peter-Levine/android_device_google_gs201 device/google/gs201-common
+
+      - name: Clone tree
+        run: git clone https://github.com/Peter-Levine/android_device_google_cheetah device/google/cheetah
+
+      - name: Build
+        run: |
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          lunch twrp_cheetah-eng
+          mka recoveryimage
+
+      - name: Cache ccache
+        uses: actions/cache@v2
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache-${{ github.ref }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: TWRP Image
+          path: out/target/product/cheetah/*.img
