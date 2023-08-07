@@ -1,0 +1,60 @@
+name: Build TWRP Image
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  schedule:
+    - cron: '0 0 * * *'
+
+env:
+  UBUNTU_HUB: docker.io/library/ubuntu:latest
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v2
+      
+    - name: Setting up Docker Container
+      run: |
+        docker pull ${{ env.UBUNTU_HUB }}
+        docker run --name ubuntu_container -it -d ${{ env.UBUNTU_HUB }} /bin/bash
+
+    - name: Install Dependencies
+      run: |
+        docker exec -t ubuntu_container bash -c "apt-get update && apt-get install -y git-core gnupg flex bison gperf build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig repo"
+        
+    - name: Setup Build Environment
+      run: |
+        docker exec -t ubuntu_container bash -c "mkdir -p /root/twrp && cd /root/twrp && git clone https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1 .repo/local_manifests"
+        
+    - name: Fix Repo Issue
+      run: |
+        docker exec -t ubuntu_container bash -c "sed -i 's/repo sync --no-repo-verify -c --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune -jnproc/repo sync -c --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune/g' /root/twrp/.repo/local_manifests/roomservice.xml"
+        
+    - name: Sync the source
+      run: |
+        docker exec -t ubuntu_container bash -c "cd /root/twrp && repo sync"
+        
+    - name: Clone Device Tree
+      run: |
+        docker exec -t ubuntu_container bash -c "cd /root/twrp && git clone https://github.com/Peter-Levine/android_device_google_gs201 device/google/gs201-common && git clone https://github.com/Peter-Levine/android_device_google_cheetah device/google/cheetah"
+
+    - name: Start Build
+      run: |
+        docker exec -t ubuntu_container bash -c "cd /root/twrp && source build/envsetup.sh && export ALLOW_MISSING_DEPENDENCIES=true && lunch twrp_cheetah-eng && mka recoveryimage"
+        
+    - name: Archive Production Artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: flashable_twrp_image
+        path: |
+          /root/twrp/out/target/product/cheetah/recovery.img
+
+    - name: Cleanup Docker
+      run: docker stop ubuntu_container && docker rm ubuntu_container
