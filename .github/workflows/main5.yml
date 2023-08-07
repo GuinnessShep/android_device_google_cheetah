@@ -1,0 +1,44 @@
+name: Build TWRP
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+
+    - name: Set up JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'adopt'
+        java-version: '8'
+
+    - name: Init repo
+      run: |
+        repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+
+    - name: Sync repo
+      run: |
+        repo sync --no-repo-verify -c --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune -j$(nproc)
+
+    - name: Clone common tree repo
+      run: |
+        git clone https://github.com/Peter-Levine/android_device_google_gs201 device/google/gs201-common
+
+    - name: Clone tree
+      run: |
+        git clone https://github.com/Peter-Levine/android_device_google_cheetah device/google/cheetah
+
+    - name: Build TWRP
+      run: |
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch twrp_cheetah-eng
+        mka recoveryimage
