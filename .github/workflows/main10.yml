@@ -1,0 +1,37 @@
+name: Build TWRP Image
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ALLOW_MISSING_DEPENDENCIES: true
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Setup Java Environment
+      uses: actions/setup-java@v2
+      with:
+        java-version: '11'
+        distribution: 'adopt'
+
+    - name: Clone common tree repo
+      run: git clone https://github.com/Peter-Levine/android_device_google_gs201 device/google/gs201-common
+
+    - name: Clone tree
+      run: git clone https://github.com/Peter-Levine/android_device_google_cheetah device/google/cheetah
+
+    - name: Build TWRP Image
+      run: |
+        source build/envsetup.sh
+        lunch twrp_cheetah-eng
+        mka recoveryimage
+
+    - name: Archive TWRP Image
+      uses: actions/upload-artifact@v2
+      with:
+        name: TWRP Image
+        path: out/target/product/cheetah/recovery.img
