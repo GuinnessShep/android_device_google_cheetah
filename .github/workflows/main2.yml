@@ -1,0 +1,55 @@
+name: Build TWRP Recovery Image
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Git
+        run: |
+          git config --global user.name 'Guinness Shepherd'
+          git config --global user.email 'guinnessgshep@gmail.com'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-8-jdk python lzop bison gperf build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig
+
+      - name: Clone TWRP manifest
+        run: |
+          mkdir ~/android
+          cd ~/android
+          repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+
+      - name: Sync TWRP sources
+        run: |
+          cd ~/android
+          repo sync --no-repo-verify -c --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune -j$(nproc)
+
+      - name: Clone Google Pixel 7 Pro common tree
+        run: |
+          cd ~/android
+          git clone https://github.com/Peter-Levine/android_device_google_gs201 device/google/gs201-common
+
+      - name: Clone Google Pixel 7 Pro device tree
+        run: |
+          cd ~/android
+          git clone https://github.com/Peter-Levine/android_device_google_cheetah device/google/cheetah
+
+      - name: Build TWRP recovery image
+        run: |
+          cd ~/android
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          lunch twrp_cheetah-eng
+          mka recoveryimage
+          
+      - name: Upload recovery image
+        uses: actions/upload-artifact@v2
+        with:
+          name: twrp_cheetah
+          path: out/target/product/cheetah/recovery.img
