@@ -1,0 +1,67 @@
+name: Build TWRP
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  WORK_DIR: "/github/workspace"
+  COMMON_TREE_REPO: "https://github.com/Peter-Levine/android_device_google_gs201"
+  DEVICE_TREE_REPO: "https://github.com/Peter-Levine/android_device_google_cheetah"
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Update Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get upgrade -y
+
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+
+    - name: Setup Java JDK
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'adopt-hotspot'
+        java-version: '11'
+        
+    - name: Update Repo
+      run: |
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
+        chmod a+x ~/repo
+        sudo mv ~/repo /usr/local/bin/
+
+    - name: Init Repo
+      run: |
+        repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+        # upgrade repo
+        cp .repo/repo/repo /usr/local/bin/repo
+
+    - name: Sync Repo
+      run: |
+        repo sync --no-repo-verify -c --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune -j$(nproc)
+    
+    - name: Clone Common Tree Repo
+      run: |
+        git clone ${COMMON_TREE_REPO} device/google/gs201-common
+    - name: Clone Device Tree Repo
+      run: |
+        git clone ${DEVICE_TREE_REPO} device/google/cheetah
+    - name: Build TWRP Image
+      run: |
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch twrp_cheetah-eng
+        mka recoveryimage
+    - name: Upload TWRP Image
+      uses: actions/upload-artifact@v3
+      with:
+        name: TWRP Image
+        path: out/target/product/cheetah/recovery.img
