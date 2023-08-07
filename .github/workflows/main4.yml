@@ -1,0 +1,62 @@
+name: TWRP Image Builder
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  TWRP_BRANCH: twrp-13.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Set up JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'temurin'
+        java-version: '8'
+
+    - name: Cache local Maven repository
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+
+    - name: Init Repo
+      run: |
+        repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b $TWRP_BRANCH
+
+    - name: Sync Repo
+      run: |
+        repo sync --no-repo-verify -c --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune -j$(nproc)
+
+    - name: Clone common tree repo
+      run: |
+        git clone https://github.com/Peter-Levine/android_device_google_gs201 device/google/gs201-common
+
+    - name: Clone tree
+      run: |
+        git clone https://github.com/Peter-Levine/android_device_google_cheetah device/google/cheetah
+
+    - name: Setup Build
+      run: |
+        source build/envsetup.sh; export ALLOW_MISSING_DEPENDENCIES=true; lunch twrp_cheetah-eng;
+
+    - name: Build TWRP Image
+      run: |
+        mka recoveryimage
+
+    - name: Upload TWRP Image
+      uses: actions/upload-artifact@v2
+      with:
+        name: TWRP_Image
+        path: out/target/product/cheetah/recovery.img
